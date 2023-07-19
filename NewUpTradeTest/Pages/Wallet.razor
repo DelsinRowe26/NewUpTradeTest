@@ -1,0 +1,103 @@
+﻿@page "/wallet"
+
+@inject NewUpTradeTest DbContext
+
+<PageTitle>Wallets</PageTitle>
+
+<h3>Wallet</h3>
+
+<div @onload="GetBlockNumber"></div>
+
+<label for="sort-select">Sort by:</label>
+<select id="sort-select" style="width: 20%; height: 8%;">
+	<option> </option>
+	<option value="false" @onclick="@(() => SortByBalance(false))">Low to High</option>
+	<option value="true" @onclick="@(() => SortByBalance(true))">High to Low</option>
+</select>
+
+<table class="table">
+	<thead>
+		<tr>
+			<th>Id</th>
+			<th>Address</th>
+			<th>Balance</th>
+		</tr>
+	</thead>
+	<tbody>
+		@foreach (var wallet in balances)
+		{
+			<tr>
+				<th>@wallet.Id</th>
+				<th>@wallet.Address</th>
+				<th>@wallet.balance</th>
+			</tr>
+		}
+	</tbody>
+</table>
+
+@code {
+	private System.Timers.Timer _timer;
+
+	private string? BlockNumber { get; set; }
+
+	private decimal BalanceConclusion;
+
+	private bool IsSortDescending = false;
+
+	public class Balance
+	{
+		public int Id { get; set; }
+
+		public string? Address { get; set; }
+
+		public decimal balance { get; set; }
+	}
+
+	private List<Balance> balances = new List<Balance>();
+
+	protected override async Task OnInitializedAsync()
+	{
+		_timer = new System.Timers.Timer(500);
+		_timer.Elapsed += RefreshPage;
+		_timer.AutoReset = true;
+		_timer.Enabled = true;
+
+		// Call your method here
+		await GetBlockNumber();
+	}
+
+	private async void RefreshPage(Object source, ElapsedEventArgs e)
+	{
+		await InvokeAsync(() => StateHasChanged());
+	}
+
+	private async Task GetBlockNumber()
+	{
+		var web3 = new Web3("https://sepolia.infura.io/v3/dcb2f92fa5854489a3a379d59c2cfd7c");
+		foreach (var wallet in DbContext.Wallets.ToList())
+		{
+			var address = wallet.Address;
+			var balance = await web3.Eth.GetBalance.SendRequestAsync(address);
+			var balanceInEther = UnitConversion.Convert.FromWei(balance);
+			//BalanceConclusion = balanceInEther;
+			balances.Add(new Balance { Id = wallet.Id, Address = wallet.Address, balance = balanceInEther });
+		}
+
+		var blockNumber = await web3.Eth.Blocks.GetBlockNumber.SendRequestAsync();
+		BlockNumber = blockNumber.Value.ToString();
+	}
+
+	private async void SortByBalance(bool isDescending)
+	{
+		if (isDescending)
+		{
+			balances = balances.OrderByDescending(b => b.balance).ToList();
+			await GetBlockNumber();
+		}
+		else
+		{
+			balances = balances.OrderBy(b => b.balance).ToList();
+			await GetBlockNumber();
+		}
+	}
+}
